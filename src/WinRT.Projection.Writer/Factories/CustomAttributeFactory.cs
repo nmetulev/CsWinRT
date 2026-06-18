@@ -460,6 +460,31 @@ internal static class CustomAttributeFactory
     }
 
     /// <summary>
+    /// Writes a <c>[System.Obsolete]</c> attribute when <paramref name="member"/> is deprecated but
+    /// not removed. Removed members are omitted from the projection entirely, so they get no attribute.
+    /// </summary>
+    /// <param name="writer">The writer to emit to.</param>
+    /// <param name="member">The member to inspect for <c>[Windows.Foundation.Metadata.Deprecated]</c>.</param>
+    public static void WriteObsoleteAttribute(IndentedTextWriter writer, IHasCustomAttribute member)
+    {
+        if (!member.IsDeprecatedNotRemoved)
+        {
+            return;
+        }
+
+        string? message = member.DeprecatedMessage;
+
+        if (string.IsNullOrEmpty(message))
+        {
+            writer.WriteLine("[global::System.Obsolete]");
+        }
+        else
+        {
+            writer.WriteLine($"[global::System.Obsolete(@\"{EscapeVerbatimString(message)}\")]");
+        }
+    }
+
+    /// <summary>
     /// Writes the projected type-level custom attributes for <paramref name="type"/>. Each emitted
     /// attribute is on its own line, terminated with a newline. If no attributes apply, emits nothing.
     /// </summary>
@@ -470,6 +495,7 @@ internal static class CustomAttributeFactory
     public static void WriteTypeCustomAttributes(IndentedTextWriter writer, ProjectionEmitContext context, TypeDefinition type, bool enablePlatformAttrib)
     {
         WriteCustomAttributes(writer, context, type, enablePlatformAttrib);
+        WriteObsoleteAttribute(writer, type);
     }
 
     /// <inheritdoc cref="WriteTypeCustomAttributes(IndentedTextWriter, ProjectionEmitContext, TypeDefinition, bool)"/>
@@ -490,6 +516,7 @@ internal static class CustomAttributeFactory
         int before = writer.Length;
 
         WriteCustomAttributes(writer, context, type, enablePlatformAttrib);
+        WriteObsoleteAttribute(writer, type);
 
         // If anything was written, the buffer ends with a trailing newline that came from the
         // last attribute's WriteLine. Trim it so the callback can be inlined into a multiline
