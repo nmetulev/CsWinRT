@@ -260,6 +260,13 @@ internal static partial class ClassMembersFactory
                 continue;
             }
 
+            // Skip members removed via '[Deprecated(..., DeprecationType.Remove, ...)]': the ABI
+            // vtable slot is preserved separately, but they are omitted from the projected class.
+            if (method.IsRemoved)
+            {
+                continue;
+            }
+
             // Detect a 'string ToString()' that overrides Object.ToString() and force the
             // 'override' modifier on the emitted member.
             string methodSpecForThis = methodSpec;
@@ -316,6 +323,9 @@ internal static partial class ClassMembersFactory
                     functionName: accessorName,
                     interopType: genericInteropType,
                     parameterList: $"WindowsRuntimeObjectReference thisReference{accessorParams}");
+
+                CustomAttributeFactory.WriteObsoleteAttribute(writer, method);
+
                 writer.WriteLine(isMultiline: true, $$"""
                     {{platformTrimmed}}
                     {{access}}{{methodSpecForThis}}{{ret}} {{name}}({{parms}}) => {{body}}
@@ -324,6 +334,8 @@ internal static partial class ClassMembersFactory
             else
             {
                 writer.WriteLine();
+
+                CustomAttributeFactory.WriteObsoleteAttribute(writer, method);
 
                 writer.WriteIf(!string.IsNullOrEmpty(platformAttribute), platformAttribute);
 
@@ -366,6 +378,15 @@ internal static partial class ClassMembersFactory
             string name = prop.GetRawName();
             (MethodDefinition? getter, MethodDefinition? setter) = prop.GetMethods();
 
+            // MIDL places '[Deprecated]' on the property accessor (the getter for read/write
+            // properties), not on the Property row, so removal/deprecation is checked on the accessor.
+            MethodDefinition? accessor = getter ?? setter;
+
+            if (accessor is { IsRemoved: true })
+            {
+                continue;
+            }
+
             if (!propertyState.TryGetValue(name, out PropertyAccessorState? state))
             {
                 state = new PropertyAccessorState
@@ -375,8 +396,13 @@ internal static partial class ClassMembersFactory
                     MethodSpec = methodSpec,
                     IsOverridable = isOverridable,
                     OverridableInterface = isOverridable ? originalInterface : null,
+                    DeprecationAccessor = accessor,
                 };
                 propertyState[name] = state;
+            }
+            else
+            {
+                state.DeprecationAccessor ??= accessor;
             }
 
             if (getter is not null && !state.HasGetter)
@@ -412,6 +438,13 @@ internal static partial class ClassMembersFactory
             string name = evt.GetRawName();
 
             if (!writtenEvents.Add(name))
+            {
+                continue;
+            }
+
+            // MIDL places '[Deprecated]' on the event 'add' accessor, not on the Event row.
+            // Skip events removed via 'DeprecationType.Remove' (the ABI slot is preserved separately).
+            if (evt.AddMethod is { IsRemoved: true })
             {
                 continue;
             }
@@ -527,6 +560,12 @@ internal static partial class ClassMembersFactory
 
             // Emit the public/protected event with Subscribe/Unsubscribe.
             writer.WriteLine();
+
+            // MIDL places '[Deprecated]' on the event 'add' accessor, not on the Event row.
+            if (evt.AddMethod is { } addMethod)
+            {
+                CustomAttributeFactory.WriteObsoleteAttribute(writer, addMethod);
+            }
 
             // string to each event emission. In ref mode this produces e.g.
             // [global::System.Runtime.Versioning.SupportedOSPlatform("Windows10.0.16299.0")].
