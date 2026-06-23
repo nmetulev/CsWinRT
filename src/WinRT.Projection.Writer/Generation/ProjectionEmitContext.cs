@@ -14,7 +14,12 @@ namespace WindowsRuntime.ProjectionWriter.Generation;
 /// <param name="settings">The active projection settings.</param>
 /// <param name="cache">The metadata cache for the current generation.</param>
 /// <param name="currentNamespace">The namespace currently being emitted (or <see cref="string.Empty"/> when not in a per-namespace pass).</param>
-internal sealed class ProjectionEmitContext(Settings settings, MetadataCache cache, string currentNamespace)
+/// <param name="staticConstructorAnalyzer">The analyzer over the component's managed implementation assemblies (component mode).</param>
+internal sealed class ProjectionEmitContext(
+    Settings settings,
+    MetadataCache cache,
+    string currentNamespace,
+    ComponentStaticConstructorAnalyzer staticConstructorAnalyzer)
 {
     /// <summary>
     /// Gets the active projection settings.
@@ -52,6 +57,14 @@ internal sealed class ProjectionEmitContext(Settings settings, MetadataCache cac
     /// Gets the resolver used to classify type signatures by their ABI marshalling shape.
     /// </summary>
     public AbiTypeKindResolver AbiTypeKindResolver { get; } = new AbiTypeKindResolver(cache);
+
+    /// <summary>
+    /// Gets the analyzer over the component's managed implementation assemblies (component mode).
+    /// It exposes implementation details that are absent from the <c>.winmd</c> metadata (e.g. the
+    /// <c>static</c> fields backing XAML dependency properties), computed on demand as types are
+    /// emitted. The same instance is shared by every emit context, so its memoization is reused.
+    /// </summary>
+    public ComponentStaticConstructorAnalyzer StaticConstructorAnalyzer { get; } = staticConstructorAnalyzer;
 
     /// <summary>
     /// Gets a value indicating whether platform-attribute computation should suppress platforms
